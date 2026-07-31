@@ -1,0 +1,26 @@
+# Python
+backend/.venv/
+backend/**/__pycache__/
+backend/*.db
+backend/.env
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+ 
+# Broader ignores 
+**/__pycache__/ 
+*.db 
+ 
+# httpsms (Nuxt) 
+httpsms/node_modules/ 
+httpsms/.nuxt/ 
+httpsms/dist/ 
