@@ -1,7 +1,8 @@
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
+
+from app.datetime_utils import UtcDateTime
 
 
 class Token(BaseModel):
@@ -38,13 +39,13 @@ class DeviceOut(BaseModel):
     httpsms_id: Optional[str]
     is_online: bool
     notes: Optional[str]
-    created_at: datetime
+    created_at: UtcDateTime
 
     model_config = {"from_attributes": True}
 
 
 class ContactCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=120)
+    name: Optional[str] = Field(default=None, max_length=120)
     phone: str = Field(min_length=8, max_length=32)
     group_name: Optional[str] = None
 
@@ -54,7 +55,7 @@ class ContactOut(BaseModel):
     name: str
     phone: str
     group_name: Optional[str]
-    created_at: datetime
+    created_at: UtcDateTime
 
     model_config = {"from_attributes": True}
 
@@ -82,8 +83,8 @@ class MessageOut(BaseModel):
     device_id: Optional[int]
     external_id: Optional[str]
     error_detail: Optional[str]
-    created_at: datetime
-    sent_at: Optional[datetime]
+    created_at: UtcDateTime
+    sent_at: Optional[UtcDateTime]
 
     model_config = {"from_attributes": True}
 

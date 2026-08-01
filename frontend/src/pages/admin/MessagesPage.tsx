@@ -8,6 +8,7 @@ import {
   type Message,
 } from "../../api";
 import { useAuth } from "../../auth";
+import { formatDateTimeAR } from "../../datetime";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status}`}>{status}</span>;
@@ -191,7 +192,7 @@ export function MessagesPage() {
                   <td>
                     <StatusBadge status={m.status} />
                   </td>
-                  <td>{new Date(m.created_at).toLocaleString("es-AR")}</td>
+                  <td>{formatDateTimeAR(m.created_at)}</td>
                 </tr>
               ))}
             </tbody>

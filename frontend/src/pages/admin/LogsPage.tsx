@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { clearLogs, fetchLogs, type SystemLog } from "../../api";
 import { useAuth } from "../../auth";
+import { formatDateTimeAR } from "../../datetime";
 
 export function LogsPage() {
   const { token } = useAuth();
@@ -76,7 +77,7 @@ export function LogsPage() {
                   <td className="muted" style={{ maxWidth: 360, wordBreak: "break-word" }}>
                     {log.detail || "—"}
                   </td>
-                  <td>{new Date(log.created_at).toLocaleString("es-AR")}</td>
+                  <td>{formatDateTimeAR(log.created_at)}</td>
                 </tr>
               ))}
               {!visible.length ? (

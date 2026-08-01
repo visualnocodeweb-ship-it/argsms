@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
+from app.datetime_utils import UtcDateTime
 from app.models import Device, GatewaySettings, Message, MessageStatus, SystemLog, User
 from app.services.httpsms import add_log, get_gateway_settings, httpsms, normalize_phone_ar
 
@@ -27,7 +28,7 @@ class GatewayConfigOut(BaseModel):
     webhook_secret: str
     connected: bool
     mode: str
-    last_sync_at: datetime | None
+    last_sync_at: UtcDateTime | None
     notes: str | None
     webhook_url: str
     docs: dict
@@ -186,57 +187,93 @@ async def connect_phone(
     synced = 0
 
     # Apagar dispositivos demo/seed para no usar números inventados
-    all_devices = (await db.execute(select(Device))).scalars().all()
+    all_devices = list((await db.execute(select(Device))).scalars().all())
     for device in all_devices:
         device.is_online = False
 
-    preferred = normalize_phone_ar(gw.from_phone) if gw.from_phone else ""
+    # Solo se puede enviar desde un número que la app Android haya registrado en httpSMS.
+    configured = normalize_phone_ar(gw.from_phone) if gw.from_phone else ""
+    api_numbers: list[str] = []
+    preferred = ""
+    httpsms_phone_id = ""
+
+    def find_and_dedupe(number: str) -> Device | None:
+        matches = [
+            d
+            for d in list(all_devices)
+            if d.phone_number == number or normalize_phone_ar(d.phone_number) == normalize_phone_ar(number)
+        ]
+        if not matches:
+            return None
+        matches.sort(key=lambda d: (0 if d.httpsms_id else 1, d.id))
+        keep = matches[0]
+        for dup in matches[1:]:
+            if not keep.httpsms_id and dup.httpsms_id:
+                keep.httpsms_id = dup.httpsms_id
+            if dup in all_devices:
+                all_devices.remove(dup)
+            db.delete(dup)
+        return keep
 
     for phone in phones:
-        number = normalize_phone_ar(str(phone.get("phone_number") or phone.get("owner") or "").strip())
+        raw = str(phone.get("phone_number") or phone.get("owner") or "").strip()
+        number = raw if raw.startswith("+") else normalize_phone_ar(raw)
         if not number:
             continue
-        existing = await db.execute(select(Device).where(Device.phone_number == number))
-        device = existing.scalar_one_or_none()
-        if not device:
-            # match by normalized form against existing raw numbers
-            for candidate in all_devices:
-                if normalize_phone_ar(candidate.phone_number) == number:
-                    device = candidate
-                    break
+        api_numbers.append(number)
+        phone_id = str(phone.get("id") or "")
+        device = find_and_dedupe(number)
         if not device:
             device = Device(
                 name=f"Android {number}",
                 phone_number=number,
-                httpsms_id=str(phone.get("id") or ""),
+                httpsms_id=phone_id,
                 is_online=True,
                 notes="Sincronizado desde httpSMS",
             )
             db.add(device)
+            all_devices.append(device)
         else:
             device.phone_number = number
             device.is_online = True
-            device.httpsms_id = str(phone.get("id") or device.httpsms_id or "")
+            device.httpsms_id = phone_id or device.httpsms_id or ""
         synced += 1
-        if not preferred:
+        if configured and normalize_phone_ar(number) == configured:
             preferred = number
+            httpsms_phone_id = phone_id
+
+    # Si el from escrito no coincide con ningún celular de httpSMS, usamos el real de la app.
+    if not preferred and api_numbers:
+        preferred = api_numbers[0]
+        httpsms_phone_id = str(phones[0].get("id") or "") if phones else ""
+        if configured and configured != preferred:
+            await add_log(
+                db,
+                level="warning",
+                source="gateway",
+                message="El from configurado no coincide con el celular de httpSMS",
+                detail=f"configurado={configured} real={preferred}. Se usa el de la app.",
+            )
 
     if preferred:
         gw.from_phone = preferred
-        existing = await db.execute(select(Device).where(Device.phone_number == preferred))
-        device = existing.scalar_one_or_none()
+        device = find_and_dedupe(preferred)
         if not device:
-            db.add(
-                Device(
-                    name="Mi celular",
-                    phone_number=preferred,
-                    is_online=True,
-                    notes="Registrado desde configuración del gateway",
-                )
+            device = Device(
+                name="Mi celular",
+                phone_number=preferred,
+                httpsms_id=httpsms_phone_id or None,
+                is_online=True,
+                notes="Sincronizado desde httpSMS",
             )
+            db.add(device)
+            all_devices.append(device)
             synced = max(synced, 1)
         else:
+            device.phone_number = preferred
             device.is_online = True
+            if httpsms_phone_id:
+                device.httpsms_id = httpsms_phone_id
             synced = max(synced, 1)
 
     gw.connected = True

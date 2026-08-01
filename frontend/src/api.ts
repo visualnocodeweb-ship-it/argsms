@@ -58,7 +58,15 @@ async function readError(res: Response): Promise<string> {
   try {
     const data = await res.json();
     if (typeof data.detail === "string") return data.detail;
-    return "Error en la solicitud";
+    if (Array.isArray(data.detail)) {
+      return data.detail
+        .map((item: { msg?: string } | string) =>
+          typeof item === "string" ? item : item.msg || JSON.stringify(item),
+        )
+        .join("; ");
+    }
+    if (typeof data.message === "string") return data.message;
+    return `Error HTTP ${res.status}`;
   } catch {
     return `Error HTTP ${res.status}`;
   }
@@ -164,7 +172,7 @@ export async function fetchContacts(token: string): Promise<Contact[]> {
 
 export async function createContact(
   token: string,
-  payload: { name: string; phone: string; group_name?: string },
+  payload: { name?: string; phone: string; group_name?: string },
 ): Promise<Contact> {
   const res = await fetch(`${API_BASE}/api/contacts`, {
     method: "POST",

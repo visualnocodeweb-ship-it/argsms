@@ -25,7 +25,12 @@ async def create_contact(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    contact = Contact(**payload.model_dump())
+    data = payload.model_dump()
+    name = (data.get("name") or "").strip()
+    data["name"] = name or data["phone"]
+    group = (data.get("group_name") or "").strip()
+    data["group_name"] = group or None
+    contact = Contact(**data)
     db.add(contact)
     await db.commit()
     await db.refresh(contact)

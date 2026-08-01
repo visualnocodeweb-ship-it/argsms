@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
+from app.datetime_utils import UtcDateTime
 from app.models import Message, MessageStatus, SystemLog, User
 from app.services.httpsms import add_log, get_gateway_settings
 
@@ -17,7 +18,7 @@ class LogOut(BaseModel):
     source: str
     message: str
     detail: str | None
-    created_at: object
+    created_at: UtcDateTime
 
     model_config = {"from_attributes": True}
 

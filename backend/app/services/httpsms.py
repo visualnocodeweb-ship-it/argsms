@@ -1,11 +1,44 @@
+import ssl
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
+import truststore
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Device, GatewaySettings, Message, MessageStatus, SystemLog
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Usa el almacén de certificados del SO (necesario en Windows con proxy/AV)."""
+    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+
+def _http_client(**kwargs: Any) -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=30.0, verify=_ssl_context(), **kwargs)
+
+
+def _httpsms_error_detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except Exception:  # noqa: BLE001
+        return response.text
+    parts: list[str] = []
+    message = body.get("message")
+    if message:
+        parts.append(str(message))
+    data = body.get("data")
+    if isinstance(data, dict):
+        for field, errors in data.items():
+            if isinstance(errors, list):
+                parts.append(f"{field}: {'; '.join(str(e) for e in errors)}")
+            else:
+                parts.append(f"{field}: {errors}")
+    elif data not in (None, ""):
+        parts.append(str(data))
+    return " | ".join(parts) if parts else response.text
 
 
 def normalize_phone_ar(raw: str) -> str:
@@ -88,21 +121,15 @@ class HttpSMSClient:
             }
 
         payload = {"content": content, "from": from_phone, "to": to_phone}
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _http_client() as client:
             response = await client.post(
                 f"{self.base_url}/v1/messages/send",
                 json=payload,
                 headers=self._headers(),
             )
             if response.is_error:
-                detail = response.text
-                try:
-                    body = response.json()
-                    detail = str(body.get("message") or body.get("data") or body)
-                except Exception:  # noqa: BLE001
-                    pass
                 raise httpx.HTTPStatusError(
-                    f"httpSMS {response.status_code}: {detail} | payload={payload}",
+                    f"httpSMS {response.status_code}: {_httpsms_error_detail(response)} | payload={payload}",
                     request=response.request,
                     response=response,
                 )
@@ -112,20 +139,14 @@ class HttpSMSClient:
     async def get_message(self, message_id: str) -> dict:
         if not self.configured:
             return {"id": message_id, "status": "simulated"}
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _http_client() as client:
             response = await client.get(
                 f"{self.base_url}/v1/messages/{message_id}",
                 headers=self._headers(),
             )
             if response.is_error:
-                detail = response.text
-                try:
-                    body = response.json()
-                    detail = str(body.get("message") or body)
-                except Exception:  # noqa: BLE001
-                    pass
                 raise httpx.HTTPStatusError(
-                    f"httpSMS {response.status_code}: {detail}",
+                    f"httpSMS {response.status_code}: {_httpsms_error_detail(response)}",
                     request=response.request,
                     response=response,
                 )
@@ -135,7 +156,7 @@ class HttpSMSClient:
     async def list_phones(self) -> list[dict]:
         if not self.configured:
             return []
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _http_client() as client:
             response = await client.get(
                 f"{self.base_url}/v1/phones",
                 params={"skip": 0, "limit": 50},
@@ -159,6 +180,44 @@ class HttpSMSClient:
             }
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "mode": "live", "detail": str(exc)}
+
+    async def ensure_phone(self, *, phone_number: str, fcm_token: str, sim: str = "SIM1") -> dict:
+        """Registra/actualiza un número en httpSMS reutilizando el FCM del celular."""
+        if not self.configured:
+            return {"ok": False, "detail": "Falta API key de httpSMS"}
+        number = normalize_phone_ar(phone_number)
+        if not number or not fcm_token:
+            return {"ok": False, "detail": "Falta número o fcm_token"}
+        payload = {
+            "phone_number": number,
+            "fcm_token": fcm_token,
+            "sim": sim if sim in {"SIM1", "SIM2"} else "SIM1",
+            "max_send_attempts": 2,
+            "message_expiration_seconds": 600,
+            "messages_per_minute": 10,
+            "unarchive_thread": False,
+        }
+        try:
+            async with _http_client() as client:
+                response = await client.put(
+                    f"{self.base_url}/v1/phones",
+                    json=payload,
+                    headers=self._headers(),
+                )
+                if response.is_error:
+                    return {
+                        "ok": False,
+                        "detail": _httpsms_error_detail(response),
+                    }
+                data = response.json().get("data", response.json())
+                return {
+                    "ok": True,
+                    "id": str(data.get("id") or ""),
+                    "phone_number": str(data.get("phone_number") or number),
+                    "data": data,
+                }
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "detail": str(exc)}
 
 
 httpsms = HttpSMSClient()
