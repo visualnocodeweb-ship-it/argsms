@@ -301,3 +301,139 @@ export async function createProject(
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
+
+export type BotonRojoPersonaA = {
+  persona_a_phone: string;
+  project_id: number;
+  project_name: string;
+  avisar_equipo_hint: string;
+};
+
+export type EquipoMember = {
+  id: number;
+  name: string;
+  phone: string;
+  institution: string | null;
+  created_at: string;
+};
+
+export type BotonRojoAntecedenteMessage = {
+  id: number;
+  to_phone: string;
+  to_name: string | null;
+  to_institution: string | null;
+  content: string;
+  status: string;
+  category: string | null;
+  error_detail: string | null;
+  created_at: string;
+  sent_at: string | null;
+};
+
+export type BotonRojoAntecedente = {
+  id: number;
+  requester_phone: string;
+  requester_name: string | null;
+  status: string;
+  created_at: string;
+  notified_at: string | null;
+  team_alerted_at: string | null;
+  persona_a_enviada: boolean;
+  equipo_enviado: boolean;
+  equipo_sms_enviados: number;
+  equipo_sms_fallidos: number;
+  messages: BotonRojoAntecedenteMessage[];
+};
+
+export async function fetchBotonRojoPersonaA(token: string, projectId: number) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/persona-a`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<BotonRojoPersonaA>;
+}
+
+export async function saveBotonRojoPersonaA(token: string, projectId: number, phone: string) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/persona-a`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ persona_a_phone: phone }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<BotonRojoPersonaA>;
+}
+
+export async function fetchBotonRojoEquipo(token: string, projectId: number) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/equipo`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<EquipoMember[]>;
+}
+
+export async function addBotonRojoEquipoMember(
+  token: string,
+  projectId: number,
+  payload: { name: string; phone: string; institution?: string },
+) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/equipo`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<EquipoMember>;
+}
+
+export async function deleteBotonRojoEquipoMember(token: string, projectId: number, memberId: number) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/equipo/${memberId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function fetchBotonRojoAntecedentes(token: string, projectId: number) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/antecedentes`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<BotonRojoAntecedente[]>;
+}
+
+export async function fetchBotonRojoAvisarInfo(token: string) {
+  const res = await fetch(`${API_BASE}/api/public/boton-rojo/avisar/${token}`);
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<{
+    ok: boolean;
+    status: string;
+    requester_phone: string;
+    requester_name: string | null;
+    already_done: boolean;
+  }>;
+}
+
+export async function avisarEquipoBotonRojo(token: string) {
+  const res = await fetch(`${API_BASE}/api/public/boton-rojo/avisar/${token}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<{
+    ok: boolean;
+    already_done: boolean;
+    detail: string;
+    sent: number;
+    failed?: number;
+  }>;
+}
+
+/** Lo usa el otro proyecto (formulario Botón Rojo) */
+export async function triggerBotonRojoAlerta(payload: { phone: string; name?: string }) {
+  const res = await fetch(`${API_BASE}/api/public/boton-rojo/alerta`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<{ ok: boolean; detail: string; alert_id: number | null }>;
+}

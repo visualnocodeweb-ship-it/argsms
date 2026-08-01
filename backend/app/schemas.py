@@ -48,6 +48,7 @@ class ContactCreate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=120)
     phone: str = Field(min_length=8, max_length=32)
     group_name: Optional[str] = None
+    institution: Optional[str] = Field(default=None, max_length=120)
 
 
 class ContactOut(BaseModel):
@@ -55,6 +56,7 @@ class ContactOut(BaseModel):
     name: str
     phone: str
     group_name: Optional[str]
+    institution: Optional[str] = None
     created_at: UtcDateTime
 
     model_config = {"from_attributes": True}

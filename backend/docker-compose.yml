@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mensajes-arg-db
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_DB: mensajes_arg
+      POSTGRES_USER: mensajes
+    volumes:
+      - mensajes_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mensajes -d mensajes_arg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mensajes
+
+  api:
+    build: .
+    container_name: mensajes-arg-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    ports:
+      - "127.0.0.1:8200:8000"
+    networks:
+      - mensajes
+
+volumes:
+  mensajes_pg_data:
+
+networks:
+  mensajes:
+    name: mensajes-arg-net

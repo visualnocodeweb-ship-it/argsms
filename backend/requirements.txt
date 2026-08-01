@@ -9,4 +9,5 @@ bcrypt>=4.2.0
 python-multipart>=0.0.20
 httpx>=0.28.0
 aiosqlite>=0.20.0
+asyncpg>=0.30.0
 truststore>=0.10.0

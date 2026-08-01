@@ -26,6 +26,7 @@ export function ProjectLayout() {
   if (!token) return <Navigate to="/admin/login" replace />;
 
   const base = `/admin/projects/${projectId}`;
+  const isBotonRojo = project?.slug === "boton-rojo";
 
   return (
     <div className="admin-shell">
@@ -38,13 +39,24 @@ export function ProjectLayout() {
           {project?.name || "Proyecto"}
         </div>
         <nav>
-          <NavLink to={base} end>
-            Dashboard
-          </NavLink>
-          <NavLink to={`${base}/messages`}>Mensajes</NavLink>
-          <NavLink to={`${base}/devices`}>Dispositivos</NavLink>
-          <NavLink to={`${base}/contacts`}>Contactos</NavLink>
-          <NavLink to={`${base}/logs`}>Logs</NavLink>
+          {isBotonRojo ? (
+            <>
+              <NavLink to={`${base}/antecedentes`}>Antecedentes</NavLink>
+              <NavLink to={`${base}/red-comunitaria`}>Red Comunitaria</NavLink>
+              <NavLink to={`${base}/equipo-alerta`}>Equipo de alerta</NavLink>
+              <NavLink to={`${base}/logs`}>Logs</NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink to={base} end>
+                Dashboard
+              </NavLink>
+              <NavLink to={`${base}/messages`}>Mensajes</NavLink>
+              <NavLink to={`${base}/devices`}>Dispositivos</NavLink>
+              <NavLink to={`${base}/contacts`}>Contactos</NavLink>
+              <NavLink to={`${base}/logs`}>Logs</NavLink>
+            </>
+          )}
           <NavLink to="/admin">← Proyectos</NavLink>
         </nav>
         <div style={{ marginTop: "auto" }}>
@@ -59,7 +71,13 @@ export function ProjectLayout() {
         </div>
       </aside>
       <main className="admin-main">
-        {error ? <p className="error">{error}</p> : <Outlet context={{ project }} />}
+        {error ? (
+          <p className="error">{error}</p>
+        ) : !project ? (
+          <p className="muted">Cargando proyecto...</p>
+        ) : (
+          <Outlet context={{ project }} />
+        )}
       </main>
     </div>
   );

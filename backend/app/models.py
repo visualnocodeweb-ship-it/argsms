@@ -59,6 +59,7 @@ class Contact(Base):
     name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(32), index=True)
     group_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    institution: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -101,3 +102,30 @@ class SystemLog(Base):
     message: Mapped[str] = mapped_column(Text)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BotonRojoSettings(Base):
+    """Config del proyecto Botón Rojo: a quién avisar primero."""
+
+    __tablename__ = "boton_rojo_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    persona_a_phone: Mapped[str] = mapped_column(String(32), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BotonRojoAlert(Base):
+    """Alerta creada cuando el otro proyecto envía un formulario."""
+
+    __tablename__ = "boton_rojo_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(Integer, index=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    requester_phone: Mapped[str] = mapped_column(String(32))
+    requester_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    team_alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

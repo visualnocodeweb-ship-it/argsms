@@ -7,15 +7,28 @@ from sqlalchemy import select, text
 from app.auth import hash_password
 from app.config import settings
 from app.database import Base, SessionLocal, engine
-from app.models import Contact, Device, GatewaySettings, Message, Project, SystemLog, User
-from app.routers import admin, auth, contacts, devices, gateway, logs, messages, projects
+from app.models import (
+    BotonRojoSettings,
+    Contact,
+    Device,
+    GatewaySettings,
+    Message,
+    Project,
+    SystemLog,
+    User,
+)
+from app.routers import admin, auth, boton_rojo, contacts, devices, gateway, logs, messages, projects
+from app.services.httpsms import normalize_phone_ar
 
 
 async def ensure_sqlite_columns() -> None:
-    """Agrega project_id a tablas ya existentes (SQLite)."""
+    """Agrega columnas nuevas a tablas ya existentes (SQLite)."""
+    if not settings.database_url.startswith("sqlite"):
+        return
     alters = [
         ("devices", "project_id INTEGER"),
         ("contacts", "project_id INTEGER"),
+        ("contacts", "institution VARCHAR(120)"),
         ("messages", "project_id INTEGER"),
         ("gateway_settings", "project_id INTEGER"),
         ("system_logs", "project_id INTEGER"),
@@ -55,6 +68,53 @@ async def seed_data() -> None:
             )
             db.add(demo)
             await db.flush()
+
+        boton_rojo = (
+            await db.execute(select(Project).where(Project.slug == "boton-rojo"))
+        ).scalar_one_or_none()
+        if not boton_rojo:
+            boton_rojo = Project(
+                slug="boton-rojo",
+                name="Botón Rojo",
+                description=(
+                    "Recibe formulario del otro proyecto → SMS a Red Comunitaria → "
+                    "link Avisar equipo → SMS a Equipo de alerta"
+                ),
+                color="#e85d4c",
+            )
+            db.add(boton_rojo)
+            await db.flush()
+        else:
+            boton_rojo.name = "Botón Rojo"
+            boton_rojo.color = "#e85d4c"
+            boton_rojo.description = (
+                "Recibe formulario del otro proyecto → SMS a Red Comunitaria → "
+                "link Avisar equipo → SMS a Equipo de alerta"
+            )
+
+        # Limpiar solo contactos viejos de prueba; Equipo de alerta se conserva
+        old_br_contacts = (
+            await db.execute(select(Contact).where(Contact.project_id == boton_rojo.id))
+        ).scalars().all()
+        for contact in old_br_contacts:
+            if contact.group_name != "Equipo de alerta":
+                await db.delete(contact)
+
+        persona_a_phone = normalize_phone_ar("02944249272")
+        br_settings = (
+            await db.execute(
+                select(BotonRojoSettings).where(BotonRojoSettings.project_id == boton_rojo.id)
+            )
+        ).scalar_one_or_none()
+        if not br_settings:
+            db.add(
+                BotonRojoSettings(
+                    project_id=boton_rojo.id,
+                    persona_a_phone=persona_a_phone,
+                )
+            )
+        elif not (br_settings.persona_a_phone or "").strip():
+            br_settings.persona_a_phone = persona_a_phone
 
         devices = (await db.execute(select(Device))).scalars().all()
         if not devices:
@@ -142,6 +202,7 @@ app.include_router(contacts.router)
 app.include_router(admin.router)
 app.include_router(gateway.router)
 app.include_router(logs.router)
+app.include_router(boton_rojo.router)
 
 
 @app.get("/api/health")
