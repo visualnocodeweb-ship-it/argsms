@@ -58,19 +58,26 @@ async def seed_data() -> None:
             user.full_name = "Demo Mensajes ARG"
             user.is_active = True
 
-        # Operador dedicado: entra directo a Botón Rojo (usuario: botonrojo)
-        br_user = (
-            await db.execute(select(User).where(User.email == "botonrojo"))
-        ).scalar_one_or_none()
+        # Operador dedicado: entra directo a Botón Rojo
+        # Login: botonrojo@mensajesarg.com / botonrojoadmin (también acepta "botonrojo")
+        br_emails = ("botonrojo@mensajesarg.com", "botonrojo")
+        br_user = None
+        for br_email in br_emails:
+            br_user = (
+                await db.execute(select(User).where(User.email == br_email))
+            ).scalar_one_or_none()
+            if br_user:
+                break
         if not br_user:
             db.add(
                 User(
-                    email="botonrojo",
+                    email="botonrojo@mensajesarg.com",
                     hashed_password=hash_password("botonrojoadmin"),
                     full_name="Botón Rojo Admin",
                 )
             )
         else:
+            br_user.email = "botonrojo@mensajesarg.com"
             br_user.hashed_password = hash_password("botonrojoadmin")
             br_user.full_name = "Botón Rojo Admin"
             br_user.is_active = True

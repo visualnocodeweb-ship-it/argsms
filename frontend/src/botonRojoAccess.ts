@@ -1,10 +1,11 @@
 import type { Project, User } from "./api";
 
-export const BOTON_ROJO_OPERATOR = "botonrojo";
+export const BOTON_ROJO_OPERATOR = "botonrojo@mensajesarg.com";
 export const BOTON_ROJO_SLUG = "boton-rojo";
 
 export function isBotonRojoOperator(user: User | null | undefined): boolean {
-  return user?.email === BOTON_ROJO_OPERATOR;
+  const email = (user?.email || "").toLowerCase();
+  return email === BOTON_ROJO_OPERATOR || email === "botonrojo";
 }
 
 export function botonRojoHomePath(projects: Project[]): string | null {

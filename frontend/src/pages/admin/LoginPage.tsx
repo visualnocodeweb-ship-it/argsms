@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { fetchProjects } from "../../api";
 import { useAuth } from "../../auth";
-import { BOTON_ROJO_OPERATOR, botonRojoHomePath } from "../../botonRojoAccess";
+import { botonRojoHomePath, isBotonRojoOperator } from "../../botonRojoAccess";
 
 export function LoginPage() {
   const { login, token, loading } = useAuth();
@@ -20,7 +20,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const user = await login(email.trim(), password);
-      if (user.email === BOTON_ROJO_OPERATOR) {
+      if (isBotonRojoOperator(user)) {
         const token = localStorage.getItem("mensajes_arg_token");
         if (!token) {
           navigate("/admin");
