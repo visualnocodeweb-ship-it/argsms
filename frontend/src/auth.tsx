@@ -5,7 +5,7 @@ type AuthContextValue = {
   token: string | null;
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
 };
 
@@ -52,7 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async login(email, password) {
         const access = await loginRequest(email, password);
         localStorage.setItem(TOKEN_KEY, access);
+        const me = await fetchMe(access);
         setToken(access);
+        setUser(me);
+        return me;
       },
       logout() {
         localStorage.removeItem(TOKEN_KEY);

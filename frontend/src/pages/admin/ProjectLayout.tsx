@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Outlet, useParams } from "react-router-dom";
-import { fetchProject, type Project } from "../../api";
+import { fetchProject, fetchProjects, type Project } from "../../api";
 import { useAuth } from "../../auth";
+import {
+  BOTON_ROJO_SLUG,
+  botonRojoHomePath,
+  isBotonRojoOperator,
+} from "../../botonRojoAccess";
 
 export function ProjectLayout() {
   const { projectId } = useParams();
   const { token, user, loading, logout } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState("");
+  const [operatorHome, setOperatorHome] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || !projectId) return;
@@ -15,6 +21,13 @@ export function ProjectLayout() {
       .then(setProject)
       .catch((err) => setError(err instanceof Error ? err.message : "Proyecto no encontrado"));
   }, [token, projectId]);
+
+  useEffect(() => {
+    if (!token || !isBotonRojoOperator(user)) return;
+    fetchProjects(token)
+      .then((list) => setOperatorHome(botonRojoHomePath(list)))
+      .catch(() => setOperatorHome(null));
+  }, [token, user]);
 
   if (loading) {
     return (
@@ -27,6 +40,11 @@ export function ProjectLayout() {
 
   const base = `/admin/projects/${projectId}`;
   const isBotonRojo = project?.slug === "boton-rojo";
+  const operatorOnly = isBotonRojoOperator(user);
+
+  if (operatorOnly && project && project.slug !== BOTON_ROJO_SLUG && operatorHome) {
+    return <Navigate to={operatorHome} replace />;
+  }
 
   return (
     <div className="admin-shell">
@@ -57,7 +75,7 @@ export function ProjectLayout() {
               <NavLink to={`${base}/logs`}>Logs</NavLink>
             </>
           )}
-          <NavLink to="/admin">← Proyectos</NavLink>
+          {!operatorOnly ? <NavLink to="/admin">← Proyectos</NavLink> : null}
         </nav>
         <div style={{ marginTop: "auto" }}>
           <p className="muted" style={{ color: "rgba(247,250,251,0.55)", marginBottom: "0.8rem" }}>

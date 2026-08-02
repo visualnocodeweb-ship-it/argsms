@@ -1,6 +1,8 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
+import { fetchProjects } from "../../api";
 import { useAuth } from "../../auth";
+import { BOTON_ROJO_OPERATOR, botonRojoHomePath } from "../../botonRojoAccess";
 
 export function LoginPage() {
   const { login, token, loading } = useAuth();
@@ -17,8 +19,18 @@ export function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password);
-      navigate("/admin");
+      const user = await login(email.trim(), password);
+      if (user.email === BOTON_ROJO_OPERATOR) {
+        const token = localStorage.getItem("mensajes_arg_token");
+        if (!token) {
+          navigate("/admin");
+          return;
+        }
+        const projects = await fetchProjects(token);
+        navigate(botonRojoHomePath(projects) ?? "/admin");
+      } else {
+        navigate("/admin");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión");
     } finally {
@@ -33,11 +45,17 @@ export function LoginPage() {
           Mensajes <span>ARG</span>
         </div>
         <h1>Admin</h1>
-        <p>Elegí un proyecto para operar el envío de mensajes.</p>
+        <p>Ingresá con tu usuario para operar el envío de mensajes.</p>
         <div className="form-grid">
           <label>
-            Email
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
+            Usuario
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              autoComplete="username"
+              required
+            />
           </label>
           <label>
             Contraseña
@@ -45,6 +63,7 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               type="password"
+              autoComplete="current-password"
               required
             />
           </label>
