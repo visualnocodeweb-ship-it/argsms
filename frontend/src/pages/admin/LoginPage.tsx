@@ -2,14 +2,11 @@ import { FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth";
 
-const DEMO_EMAIL = "demo@mensajesarg.com";
-const DEMO_PASSWORD = "demo123";
-
 export function LoginPage() {
   const { login, token, loading } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState(DEMO_EMAIL);
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,20 +34,6 @@ export function LoginPage() {
         </div>
         <h1>Admin</h1>
         <p>Elegí un proyecto para operar el envío de mensajes.</p>
-        <div className="demo-creds" style={{
-          marginBottom: "1rem",
-          padding: "0.85rem 1rem",
-          borderRadius: "12px",
-          border: "1px solid rgba(25, 201, 138, 0.28)",
-          background: "rgba(25, 201, 138, 0.08)",
-          fontSize: "0.9rem",
-        }}>
-          <strong style={{ display: "block", marginBottom: "0.35rem", color: "#19c98a" }}>
-            Usuario demo
-          </strong>
-          <div>Email: <code>{DEMO_EMAIL}</code></div>
-          <div>Contraseña: <code>{DEMO_PASSWORD}</code></div>
-        </div>
         <div className="form-grid">
           <label>
             Email
