@@ -17,9 +17,11 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     username = (form_data.username or "").strip()
-    # Alias corto del operador Botón Rojo
+    # Alias cortos de operadores
     if username.lower() == "botonrojo":
         username = "botonrojo@mensajesarg.com"
+    elif username.lower() == "faunanqn":
+        username = "faunanqn@mensajesarg.com"
     result = await db.execute(select(User).where(User.email == username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(form_data.password, user.hashed_password):

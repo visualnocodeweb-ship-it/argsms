@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { fetchProjects } from "../../api";
 import { useAuth } from "../../auth";
 import { botonRojoHomePath, isBotonRojoOperator } from "../../botonRojoAccess";
+import { faunaNqnHomePath, isFaunaNqnOperator } from "../../faunaNqnAccess";
 
 export function LoginPage() {
   const { login, token, loading } = useAuth();
@@ -20,14 +21,17 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const user = await login(email.trim(), password);
+      const token = localStorage.getItem("mensajes_arg_token");
+      if (!token) {
+        navigate("/admin");
+        return;
+      }
       if (isBotonRojoOperator(user)) {
-        const token = localStorage.getItem("mensajes_arg_token");
-        if (!token) {
-          navigate("/admin");
-          return;
-        }
         const projects = await fetchProjects(token);
         navigate(botonRojoHomePath(projects) ?? "/admin");
+      } else if (isFaunaNqnOperator(user)) {
+        const projects = await fetchProjects(token);
+        navigate(faunaNqnHomePath(projects) ?? "/admin");
       } else {
         navigate("/admin");
       }

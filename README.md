@@ -35,6 +35,16 @@ Credenciales demo:
 - Email: `demo@mensajesarg.com`
 - Password: `demo123`
 
+Proyecto **FaunaNQN** (operador dedicado):
+
+- Usuario: `faunanqn` o `faunanqn@mensajesarg.com`
+- Password: `faunanqnadmin`
+
+Proyecto **Botón Rojo** (operador dedicado):
+
+- Usuario: `botonrojo` o `botonrojo@mensajesarg.com`
+- Password: `botonrojoadmin`
+
 ### Frontend
 
 Si el proyecto está en un share de red (`\\servidor\...`), en Windows usá `pushd` para mapear unidad (npm/esbuild no bancan rutas UNC):

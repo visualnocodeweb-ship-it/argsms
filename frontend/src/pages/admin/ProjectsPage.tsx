@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { createProject, fetchProjects, type Project } from "../../api";
 import { useAuth } from "../../auth";
 import { botonRojoHomePath, isBotonRojoOperator } from "../../botonRojoAccess";
+import { faunaNqnHomePath, isFaunaNqnOperator } from "../../faunaNqnAccess";
 
 export function ProjectsPage() {
   const { token, user, loading, logout } = useAuth();
@@ -19,6 +20,8 @@ export function ProjectsPage() {
         setProjects(list);
         if (isBotonRojoOperator(user)) {
           setHomePath(botonRojoHomePath(list));
+        } else if (isFaunaNqnOperator(user)) {
+          setHomePath(faunaNqnHomePath(list));
         }
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Error"));
@@ -32,7 +35,7 @@ export function ProjectsPage() {
     );
   }
   if (!token) return <Navigate to="/admin/login" replace />;
-  if (isBotonRojoOperator(user) && homePath) {
+  if ((isBotonRojoOperator(user) || isFaunaNqnOperator(user)) && homePath) {
     return <Navigate to={homePath} replace />;
   }
 

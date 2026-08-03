@@ -7,6 +7,11 @@ import {
   botonRojoHomePath,
   isBotonRojoOperator,
 } from "../../botonRojoAccess";
+import {
+  FAUNA_NQN_SLUG,
+  faunaNqnHomePath,
+  isFaunaNqnOperator,
+} from "../../faunaNqnAccess";
 
 export function ProjectLayout() {
   const { projectId } = useParams();
@@ -23,10 +28,18 @@ export function ProjectLayout() {
   }, [token, projectId]);
 
   useEffect(() => {
-    if (!token || !isBotonRojoOperator(user)) return;
-    fetchProjects(token)
-      .then((list) => setOperatorHome(botonRojoHomePath(list)))
-      .catch(() => setOperatorHome(null));
+    if (!token) return;
+    if (isBotonRojoOperator(user)) {
+      fetchProjects(token)
+        .then((list) => setOperatorHome(botonRojoHomePath(list)))
+        .catch(() => setOperatorHome(null));
+      return;
+    }
+    if (isFaunaNqnOperator(user)) {
+      fetchProjects(token)
+        .then((list) => setOperatorHome(faunaNqnHomePath(list)))
+        .catch(() => setOperatorHome(null));
+    }
   }, [token, user]);
 
   if (loading) {
@@ -40,9 +53,14 @@ export function ProjectLayout() {
 
   const base = `/admin/projects/${projectId}`;
   const isBotonRojo = project?.slug === "boton-rojo";
-  const operatorOnly = isBotonRojoOperator(user);
+  const operatorOnly = isBotonRojoOperator(user) || isFaunaNqnOperator(user);
+  const allowedSlug = isBotonRojoOperator(user)
+    ? BOTON_ROJO_SLUG
+    : isFaunaNqnOperator(user)
+      ? FAUNA_NQN_SLUG
+      : null;
 
-  if (operatorOnly && project && project.slug !== BOTON_ROJO_SLUG && operatorHome) {
+  if (operatorOnly && project && allowedSlug && project.slug !== allowedSlug && operatorHome) {
     return <Navigate to={operatorHome} replace />;
   }
 

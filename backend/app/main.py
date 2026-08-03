@@ -96,6 +96,30 @@ async def seed_data() -> None:
             br_user.full_name = "Botón Rojo Admin"
             br_user.is_active = True
 
+        # Operador dedicado FaunaNQN
+        # Login: faunanqn@mensajesarg.com / faunanqnadmin (también acepta "faunanqn")
+        fauna_emails = ("faunanqn@mensajesarg.com", "faunanqn")
+        fauna_user = None
+        for fauna_email in fauna_emails:
+            fauna_user = (
+                await db.execute(select(User).where(User.email == fauna_email))
+            ).scalar_one_or_none()
+            if fauna_user:
+                break
+        if not fauna_user:
+            db.add(
+                User(
+                    email="faunanqn@mensajesarg.com",
+                    hashed_password=hash_password("faunanqnadmin"),
+                    full_name="FaunaNQN Admin",
+                )
+            )
+        else:
+            fauna_user.email = "faunanqn@mensajesarg.com"
+            fauna_user.hashed_password = hash_password("faunanqnadmin")
+            fauna_user.full_name = "FaunaNQN Admin"
+            fauna_user.is_active = True
+
         demo = (await db.execute(select(Project).where(Project.slug == "demo"))).scalar_one_or_none()
         if not demo:
             demo = Project(
@@ -128,6 +152,29 @@ async def seed_data() -> None:
             boton_rojo.description = (
                 "Recibe formulario del otro proyecto → SMS a Red Comunitaria → "
                 "link Avisar equipo → SMS a Equipo de alerta"
+            )
+
+        fauna = (
+            await db.execute(select(Project).where(Project.slug == "faunanqn"))
+        ).scalar_one_or_none()
+        if not fauna:
+            fauna = Project(
+                slug="faunanqn",
+                name="FaunaNQN",
+                description=(
+                    "Proyecto FaunaNQN: SMS, gateway celular, contactos y mensajes "
+                    "para operaciones de la organización"
+                ),
+                color="#2d8f6f",
+            )
+            db.add(fauna)
+            await db.flush()
+        else:
+            fauna.name = "FaunaNQN"
+            fauna.color = "#2d8f6f"
+            fauna.description = (
+                "Proyecto FaunaNQN: SMS, gateway celular, contactos y mensajes "
+                "para operaciones de la organización"
             )
 
         # Conservar Equipo de alerta y Red Comunitaria; borrar otros contactos de prueba
