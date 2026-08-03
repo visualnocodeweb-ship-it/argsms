@@ -29,9 +29,13 @@ export function BotonRojoAvisarPage() {
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "Link inválido";
+        const network =
+          msg.includes("Failed to fetch") ||
+          msg.includes("NetworkError") ||
+          msg.toLowerCase().includes("load failed");
         setError(
-          msg.includes("Failed to fetch") || msg.includes("NetworkError")
-            ? "No hay conexión con el servidor. Misma Wi‑Fi que la PC y Vite/API encendidos."
+          network
+            ? "No se pudo contactar la API. Suele ser el certificado SSL del servidor (hstgr.cloud). Probá desde la misma red o revisá el SSL del VPS."
             : msg,
         );
       })
@@ -48,9 +52,13 @@ export function BotonRojoAvisarPage() {
       setInfo((prev) => (prev ? { ...prev, already_done: true } : prev));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "No se pudo avisar al equipo";
+      const network =
+        msg.includes("Failed to fetch") ||
+        msg.includes("NetworkError") ||
+        msg.toLowerCase().includes("load failed");
       setError(
-        msg.includes("Failed to fetch") || msg.includes("NetworkError")
-          ? "No hay conexión con el servidor. Revisá que la PC esté en la misma Wi‑Fi y el front corriendo."
+        network
+          ? "No se pudo contactar la API al avisar. Revisá SSL del VPS o conexión de datos/Wi‑Fi."
           : msg,
       );
     } finally {
