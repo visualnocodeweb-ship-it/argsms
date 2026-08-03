@@ -1,8 +1,11 @@
+import json
 import secrets
 from datetime import datetime, timezone
+from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,29 @@ router = APIRouter(tags=["boton-rojo"])
 EQUIPO_GROUP = "Equipo de alerta"
 RED_GROUP = "Red Comunitaria"
 PROJECT_SLUG = "boton-rojo"
+AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+
+FIELD_LABELS = {
+    "name": "Nombre",
+    "nombre": "Nombre",
+    "phone": "Celular",
+    "telefono": "Celular",
+    "celular": "Celular",
+    "location": "Ubicación",
+    "ubicacion": "Ubicación",
+    "address": "Dirección",
+    "direccion": "Dirección",
+    "barrio": "Barrio",
+    "message": "Mensaje",
+    "mensaje": "Mensaje",
+    "detail": "Detalle",
+    "detalle": "Detalle",
+    "notes": "Notas",
+    "notas": "Notas",
+    "email": "Email",
+    "dni": "DNI",
+    "documento": "Documento",
+}
 
 
 class PersonaAConfig(BaseModel):
@@ -55,6 +81,10 @@ class EquipoMemberOut(BaseModel):
 
 
 class PublicAlertaIn(BaseModel):
+    """Acepta phone/name y cualquier otro campo que mande el formulario."""
+
+    model_config = ConfigDict(extra="allow")
+
     phone: str = Field(min_length=8, max_length=32)
     name: str | None = Field(default=None, max_length=120)
 
@@ -63,6 +93,7 @@ class PublicAlertaOut(BaseModel):
     ok: bool
     detail: str
     alert_id: int | None = None
+    public_id: str | None = None
 
 
 class AntecedenteMessageOut(BaseModel):
@@ -80,8 +111,10 @@ class AntecedenteMessageOut(BaseModel):
 
 class AntecedenteOut(BaseModel):
     id: int
+    public_id: str | None = None
     requester_phone: str
     requester_name: str | None
+    form_data: dict[str, Any] | None = None
     status: str
     created_at: UtcDateTime
     notified_at: UtcDateTime | None
@@ -91,6 +124,107 @@ class AntecedenteOut(BaseModel):
     equipo_sms_enviados: int
     equipo_sms_fallidos: int
     messages: list[AntecedenteMessageOut]
+
+
+def _now_ar() -> datetime:
+    return datetime.now(AR_TZ)
+
+
+def _form_dict(payload: PublicAlertaIn) -> dict[str, Any]:
+    data = payload.model_dump(exclude_none=True)
+    # Normalizar celular en el snapshot
+    if "phone" in data:
+        data["phone"] = normalize_phone_ar(str(data["phone"]))
+    return data
+
+
+def _format_form_lines(form: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    # Orden preferido
+    preferred = [
+        "name",
+        "nombre",
+        "phone",
+        "celular",
+        "telefono",
+        "location",
+        "ubicacion",
+        "address",
+        "direccion",
+        "barrio",
+        "message",
+        "mensaje",
+        "detail",
+        "detalle",
+        "notes",
+        "notas",
+        "email",
+        "dni",
+        "documento",
+    ]
+    seen: set[str] = set()
+    for key in preferred:
+        if key not in form:
+            continue
+        value = form[key]
+        if value is None or str(value).strip() == "":
+            continue
+        label = FIELD_LABELS.get(key, key.replace("_", " ").title())
+        lines.append(f"{label}: {value}")
+        seen.add(key)
+    for key, value in form.items():
+        if key in seen or value is None or str(value).strip() == "":
+            continue
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False)
+        label = FIELD_LABELS.get(key, key.replace("_", " ").title())
+        lines.append(f"{label}: {value}")
+    return lines
+
+
+def _build_red_sms(*, public_id: str, form: dict[str, Any], link: str) -> str:
+    parts = ["Alerta Boton Rojo", f"ID: {public_id}", *_format_form_lines(form)]
+    parts.append(f"Avisar Equipo: {link}")
+    parts.append("Mantendremos informado de la situación.")
+    return "\n".join(parts)
+
+
+def _build_equipo_sms(*, public_id: str, form: dict[str, Any]) -> str:
+    parts = ["Alerta Boton Rojo", f"ID: {public_id}", *_format_form_lines(form)]
+    parts.append("Activado por Red Comunitaria.")
+    parts.append("Mantendremos informado de la situación.")
+    return "\n".join(parts)
+
+
+def _parse_form_data(raw: str | None) -> dict[str, Any] | None:
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _next_public_id(db: AsyncSession, project_id: int) -> str:
+    """Secuencia anual: 01-26, 02-26... y en 2027 → 01-27."""
+    yy = _now_ar().strftime("%y")
+    suffix = f"-{yy}"
+    result = await db.execute(
+        select(BotonRojoAlert.public_id).where(
+            BotonRojoAlert.project_id == project_id,
+            BotonRojoAlert.public_id.is_not(None),
+            BotonRojoAlert.public_id.like(f"%{suffix}"),
+        )
+    )
+    max_n = 0
+    for value in result.scalars().all():
+        if not value:
+            continue
+        head = str(value).split("-", 1)[0]
+        if head.isdigit():
+            max_n = max(max_n, int(head))
+    return f"{max_n + 1:02d}-{yy}"
 
 
 async def _get_boton_project(db: AsyncSession) -> Project:
@@ -462,8 +596,10 @@ async def list_antecedentes(
         items.append(
             AntecedenteOut(
                 id=alert.id,
+                public_id=alert.public_id,
                 requester_phone=alert.requester_phone,
                 requester_name=alert.requester_name,
+                form_data=_parse_form_data(alert.form_data),
                 status=alert.status,
                 created_at=alert.created_at,
                 notified_at=alert.notified_at,
@@ -523,12 +659,16 @@ async def public_recibir_formulario(
         )
 
     requester = normalize_phone_ar(payload.phone)
+    form = _form_dict(payload)
+    public_id = await _next_public_id(db, project.id)
     token = secrets.token_urlsafe(24)
     alert = BotonRojoAlert(
         project_id=project.id,
         token=token,
+        public_id=public_id,
         requester_phone=requester,
         requester_name=(payload.name or "").strip() or None,
+        form_data=json.dumps(form, ensure_ascii=False),
         status="pending",
     )
     db.add(alert)
@@ -536,11 +676,7 @@ async def public_recibir_formulario(
     await db.refresh(alert)
 
     link = f"{settings.public_link_base}/boton-rojo/avisar/{token}"
-    who = alert.requester_name or requester
-    content = (
-        f"Se activo el Boton Rojo. Una persona solicita ayuda ({who}, cel {requester}). "
-        f"Avisar equipo: {link}"
-    )
+    content = _build_red_sms(public_id=public_id, form=form, link=link)
 
     sent = 0
     failed = 0
@@ -572,7 +708,7 @@ async def public_recibir_formulario(
         source="boton-rojo",
         message="Formulario recibido: aviso enviado a Red Comunitaria",
         detail=(
-            f"requester={requester} red_comunitaria={','.join(phones)} "
+            f"id={public_id} requester={requester} red_comunitaria={','.join(phones)} "
             f"sent={sent} failed={failed} link={link}"
         ),
     )
@@ -582,11 +718,13 @@ async def public_recibir_formulario(
             ok=False,
             detail=f"No se pudo avisar a Red Comunitaria (fallidos: {failed})",
             alert_id=alert.id,
+            public_id=public_id,
         )
     return PublicAlertaOut(
         ok=True,
-        detail=f"Aviso enviado a Red Comunitaria ({sent} SMS) con link para avisar al equipo",
+        detail=f"Aviso enviado a Red Comunitaria ({sent} SMS). ID {public_id}",
         alert_id=alert.id,
+        public_id=public_id,
     )
 
 
@@ -625,11 +763,12 @@ async def public_avisar_equipo(token: str, db: AsyncSession = Depends(get_db)):
         )
         raise HTTPException(status_code=400, detail="Equipo de alerta vacío. Agregá celulares en el admin.")
 
-    who = alert.requester_name or alert.requester_phone
-    content = (
-        f"ALERTA Boton Rojo: {who} (cel {alert.requester_phone}) solicita ayuda. "
-        f"Activado por Red Comunitaria."
-    )
+    form = _parse_form_data(alert.form_data) or {
+        "name": alert.requester_name,
+        "phone": alert.requester_phone,
+    }
+    public_id = alert.public_id or f"#{alert.id}"
+    content = _build_equipo_sms(public_id=public_id, form=form)
 
     sent = 0
     failed = 0
@@ -658,14 +797,15 @@ async def public_avisar_equipo(token: str, db: AsyncSession = Depends(get_db)):
         level="info" if sent else "error",
         source="boton-rojo",
         message="Equipo de alerta avisado",
-        detail=f"requester={alert.requester_phone} sent={sent} failed={failed}",
+        detail=f"id={public_id} requester={alert.requester_phone} sent={sent} failed={failed}",
     )
     return {
         "ok": sent > 0,
         "already_done": False,
-        "detail": f"Avisos enviados: {sent}. Fallidos: {failed}.",
+        "detail": f"Avisos enviados: {sent}. Fallidos: {failed}. ID {public_id}",
         "sent": sent,
         "failed": failed,
+        "public_id": public_id,
     }
 
 
@@ -679,7 +819,9 @@ async def public_avisar_equipo_info(token: str, db: AsyncSession = Depends(get_d
     return {
         "ok": True,
         "status": alert.status,
+        "public_id": alert.public_id,
         "requester_phone": alert.requester_phone,
         "requester_name": alert.requester_name,
+        "form_data": _parse_form_data(alert.form_data),
         "already_done": alert.status == "team_alerted",
     }

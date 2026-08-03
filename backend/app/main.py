@@ -18,6 +18,8 @@ from app.models import (
     User,
 )
 from app.routers import admin, auth, boton_rojo, contacts, devices, gateway, logs, messages, projects
+
+
 async def ensure_sqlite_columns() -> None:
     """Agrega columnas nuevas a tablas ya existentes (SQLite)."""
     if not settings.database_url.startswith("sqlite"):
@@ -29,6 +31,8 @@ async def ensure_sqlite_columns() -> None:
         ("messages", "project_id INTEGER"),
         ("gateway_settings", "project_id INTEGER"),
         ("system_logs", "project_id INTEGER"),
+        ("boton_rojo_alerts", "public_id VARCHAR(16)"),
+        ("boton_rojo_alerts", "form_data TEXT"),
     ]
     async with engine.begin() as conn:
         for table, coldef in alters:
@@ -36,6 +40,19 @@ async def ensure_sqlite_columns() -> None:
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {coldef}"))
             except Exception:  # noqa: BLE001 - columna ya existe
                 pass
+
+
+async def ensure_postgres_columns() -> None:
+    """Agrega columnas nuevas en Postgres (producción VPS)."""
+    if not settings.database_url.startswith("postgresql"):
+        return
+    alters = [
+        "ALTER TABLE boton_rojo_alerts ADD COLUMN IF NOT EXISTS public_id VARCHAR(16)",
+        "ALTER TABLE boton_rojo_alerts ADD COLUMN IF NOT EXISTS form_data TEXT",
+    ]
+    async with engine.begin() as conn:
+        for stmt in alters:
+            await conn.execute(text(stmt))
 
 
 async def seed_data() -> None:
@@ -193,6 +210,7 @@ async def lifespan(_: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await ensure_sqlite_columns()
+    await ensure_postgres_columns()
     await seed_data()
     yield
 

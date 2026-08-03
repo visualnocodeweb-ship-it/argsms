@@ -139,12 +139,20 @@ export function BotonRojoAntecedentesPage() {
               <div className="br-antecedente-head">
                 <div>
                   <h2>
-                    Alerta #{alert.id}
+                    ID {alert.public_id || `#${alert.id}`}
                     {alert.requester_name ? ` · ${alert.requester_name}` : ""}
                   </h2>
                   <p className="muted">
                     Celular: {alert.requester_phone} · {formatDateTimeAR(alert.created_at)}
                   </p>
+                  {alert.form_data ? (
+                    <p className="muted" style={{ marginTop: "0.35rem" }}>
+                      {Object.entries(alert.form_data)
+                        .filter(([, v]) => v !== null && String(v).trim() !== "")
+                        .map(([k, v]) => `${k}: ${String(v)}`)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

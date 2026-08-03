@@ -332,8 +332,10 @@ export type BotonRojoAntecedenteMessage = {
 
 export type BotonRojoAntecedente = {
   id: number;
+  public_id: string | null;
   requester_phone: string;
   requester_name: string | null;
+  form_data: Record<string, unknown> | null;
   status: string;
   created_at: string;
   notified_at: string | null;
@@ -440,8 +442,10 @@ export async function fetchBotonRojoAvisarInfo(token: string) {
   return res.json() as Promise<{
     ok: boolean;
     status: string;
+    public_id: string | null;
     requester_phone: string;
     requester_name: string | null;
+    form_data: Record<string, unknown> | null;
     already_done: boolean;
   }>;
 }
@@ -457,6 +461,7 @@ export async function avisarEquipoBotonRojo(token: string) {
     detail: string;
     sent: number;
     failed?: number;
+    public_id?: string;
   }>;
 }
 

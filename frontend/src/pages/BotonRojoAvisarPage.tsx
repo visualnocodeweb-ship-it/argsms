@@ -8,6 +8,7 @@ export function BotonRojoAvisarPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState<{
+    public_id: string | null;
     requester_phone: string;
     requester_name: string | null;
     already_done: boolean;
@@ -19,6 +20,7 @@ export function BotonRojoAvisarPage() {
     fetchBotonRojoAvisarInfo(token)
       .then((data) => {
         setInfo({
+          public_id: data.public_id,
           requester_phone: data.requester_phone,
           requester_name: data.requester_name,
           already_done: data.already_done,
@@ -75,6 +77,11 @@ export function BotonRojoAvisarPage() {
         {error ? <p className="error admin-feedback">{error}</p> : null}
         {info && !loading ? (
           <>
+            {info.public_id ? (
+              <p className="muted">
+                ID alerta: <strong>{info.public_id}</strong>
+              </p>
+            ) : null}
             <p>
               Solicitud de ayuda de{" "}
               <strong>{info.requester_name || info.requester_phone}</strong>
