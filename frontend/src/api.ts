@@ -363,6 +363,39 @@ export async function saveBotonRojoPersonaA(token: string, projectId: number, ph
   return res.json() as Promise<BotonRojoPersonaA>;
 }
 
+export async function fetchBotonRojoRed(token: string, projectId: number) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/red-comunitaria`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<EquipoMember[]>;
+}
+
+export async function addBotonRojoRedMember(
+  token: string,
+  projectId: number,
+  payload: { name: string; phone: string; institution?: string },
+) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/red-comunitaria`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json() as Promise<EquipoMember>;
+}
+
+export async function deleteBotonRojoRedMember(token: string, projectId: number, memberId: number) {
+  const res = await fetch(
+    `${API_BASE}/api/projects/${projectId}/boton-rojo/red-comunitaria/${memberId}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    },
+  );
+  if (!res.ok) throw new Error(await readError(res));
+}
+
 export async function fetchBotonRojoEquipo(token: string, projectId: number) {
   const res = await fetch(`${API_BASE}/api/projects/${projectId}/boton-rojo/equipo`, {
     headers: authHeaders(token),

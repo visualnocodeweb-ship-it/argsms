@@ -1,51 +1,71 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { fetchBotonRojoPersonaA, saveBotonRojoPersonaA } from "../../api";
+import {
+  addBotonRojoRedMember,
+  deleteBotonRojoRedMember,
+  fetchBotonRojoRed,
+  type EquipoMember,
+} from "../../api";
 import { useAuth } from "../../auth";
 
 export function BotonRojoPersonaAPage() {
   const { projectId } = useParams();
   const { token } = useAuth();
+  const [members, setMembers] = useState<EquipoMember[]>([]);
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [hint, setHint] = useState("");
+  const [institution, setInstitution] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  async function reload() {
     if (!token || !projectId) return;
-    fetchBotonRojoPersonaA(token, Number(projectId))
-      .then((cfg) => {
-        setPhone(cfg.persona_a_phone);
-        setHint(cfg.avisar_equipo_hint);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Error"));
+    setMembers(await fetchBotonRojoRed(token, Number(projectId)));
+  }
+
+  useEffect(() => {
+    reload().catch((err) => setError(err instanceof Error ? err.message : "Error"));
   }, [token, projectId]);
 
-  async function onSave(e: FormEvent) {
+  async function onAdd(e: FormEvent) {
     e.preventDefault();
     if (!token || !projectId) return;
     setBusy(true);
     setError("");
     setInfo("");
     try {
-      const cfg = await saveBotonRojoPersonaA(token, Number(projectId), phone);
-      setPhone(cfg.persona_a_phone);
-      setInfo(`Celular Red Comunitaria guardado: ${cfg.persona_a_phone}`);
+      await addBotonRojoRedMember(token, Number(projectId), {
+        name: name.trim(),
+        phone: phone.trim(),
+        institution: institution.trim() || undefined,
+      });
+      setName("");
+      setPhone("");
+      setInstitution("");
+      setInfo("Persona agregada a Red Comunitaria");
+      await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar");
+      setError(err instanceof Error ? err.message : "No se pudo agregar");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onDelete(id: number) {
+    if (!token || !projectId) return;
+    await deleteBotonRojoRedMember(token, Number(projectId), id);
+    await reload();
   }
 
   return (
     <div>
       <div className="admin-top">
         <div>
-          <h1>Celular Red Comunitaria</h1>
+          <h1>Red Comunitaria</h1>
           <p className="muted">
-            Recibe el SMS cuando el otro proyecto envía un formulario de Botón Rojo
+            Personas que reciben el SMS con el link “Avisar equipo” cuando llega un formulario.
+            Podés cargar varias; quedan guardadas en la base.
           </p>
         </div>
       </div>
@@ -54,34 +74,91 @@ export function BotonRojoPersonaAPage() {
       {info ? <p className="ok-msg admin-feedback">{info}</p> : null}
 
       <div className="panel">
-        <h2>Quién recibe el primer aviso</h2>
-        <p className="muted">{hint}</p>
-        <form className="form-grid" onSubmit={onSave}>
-          <label>
-            Celular Red Comunitaria
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="02944249272 o +5492944249272"
-              required
-            />
-          </label>
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            Guardar
-          </button>
+        <h2>Agregar a Red Comunitaria</h2>
+        <form className="form-grid" onSubmit={onAdd}>
+          <div className="contacts-add-row">
+            <label>
+              Celular
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+54911..."
+                required
+              />
+            </label>
+            <label>
+              Nombre
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nombre y apellido"
+                required
+              />
+            </label>
+            <label>
+              Institución / barrio
+              <input
+                value={institution}
+                onChange={(e) => setInstitution(e.target.value)}
+                placeholder="Opcional"
+              />
+            </label>
+            <button className="btn btn-primary contacts-submit" type="submit" disabled={busy}>
+              Agregar
+            </button>
+          </div>
         </form>
+      </div>
+
+      <div className="panel">
+        <h2>
+          Integrantes{" "}
+          <span className="muted" style={{ fontWeight: 500 }}>
+            ({members.length})
+          </span>
+        </h2>
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Celular</th>
+                <th>Nombre</th>
+                <th>Institución</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.phone}</td>
+                  <td>{m.name}</td>
+                  <td>{m.institution || "—"}</td>
+                  <td>
+                    <button className="btn btn-danger" type="button" onClick={() => void onDelete(m.id)}>
+                      Borrar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!members.length ? (
+                <tr>
+                  <td colSpan={4} className="muted">
+                    Todavía no hay nadie en Red Comunitaria. Agregá al menos una persona.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="panel">
         <h2>Cómo funciona</h2>
         <ol className="boton-rojo-steps">
           <li>El otro proyecto completa un formulario con un celular.</li>
-          <li>Ese sistema llama a Mensajes ARG (Botón Rojo).</li>
-          <li>
-            Llega un SMS a <strong>Red Comunitaria</strong> avisando que se activó el Botón Rojo, con
-            un link <strong>Avisar equipo</strong>.
-          </li>
-          <li>Red Comunitaria toca el link y se avisa a todo el Equipo de alerta.</li>
+          <li>Mensajes ARG envía el mismo SMS (con link) a todas las personas de Red Comunitaria.</li>
+          <li>Cualquiera de ellas puede tocar <strong>Avisar equipo</strong>.</li>
+          <li>Ahí se avisa a todo el Equipo de alerta.</li>
         </ol>
       </div>
     </div>

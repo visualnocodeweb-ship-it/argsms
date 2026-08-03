@@ -23,6 +23,7 @@ from app.services.httpsms import add_log, dispatch_message, normalize_phone_ar
 router = APIRouter(tags=["boton-rojo"])
 
 EQUIPO_GROUP = "Equipo de alerta"
+RED_GROUP = "Red Comunitaria"
 PROJECT_SLUG = "boton-rojo"
 
 
@@ -107,11 +108,41 @@ async def _get_or_create_settings(db: AsyncSession, project_id: int) -> BotonRoj
     row = result.scalar_one_or_none()
     if row:
         return row
-    row = BotonRojoSettings(project_id=project_id, persona_a_phone="+5492944249272")
+    row = BotonRojoSettings(project_id=project_id, persona_a_phone="")
     db.add(row)
     await db.commit()
     await db.refresh(row)
     return row
+
+
+async def _list_group_members(db: AsyncSession, project_id: int, group_name: str) -> list[Contact]:
+    result = await db.execute(
+        select(Contact)
+        .where(Contact.project_id == project_id, Contact.group_name == group_name)
+        .order_by(Contact.id.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def _ensure_red_members(db: AsyncSession, project: Project) -> list[Contact]:
+    """Lista Red Comunitaria; si está vacía, migra el celular legacy de settings."""
+    members = await _list_group_members(db, project.id, RED_GROUP)
+    if members:
+        return members
+    cfg = await _get_or_create_settings(db, project.id)
+    legacy = normalize_phone_ar(cfg.persona_a_phone or "")
+    if not legacy:
+        return []
+    contact = Contact(
+        project_id=project.id,
+        name="Red Comunitaria",
+        phone=legacy,
+        group_name=RED_GROUP,
+    )
+    db.add(contact)
+    await db.commit()
+    await db.refresh(contact)
+    return [contact]
 
 
 @router.get("/api/projects/{project_id}/boton-rojo/persona-a", response_model=PersonaAConfig)
@@ -120,15 +151,20 @@ async def get_persona_a(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    """Compat: primer celular de Red Comunitaria (la UI nueva usa /red-comunitaria)."""
     project = await _get_boton_project(db)
     if project.id != project_id:
         raise HTTPException(status_code=400, detail="Este endpoint es solo para Botón Rojo")
-    cfg = await _get_or_create_settings(db, project.id)
+    members = await _ensure_red_members(db, project)
+    phone = members[0].phone if members else ""
     return PersonaAConfig(
-        persona_a_phone=cfg.persona_a_phone,
+        persona_a_phone=phone,
         project_id=project.id,
         project_name=project.name,
-        avisar_equipo_hint="Cuando llega un formulario, Red Comunitaria recibe un SMS con un link para avisar al Equipo de alerta.",
+        avisar_equipo_hint=(
+            "Cuando llega un formulario, cada persona de Red Comunitaria recibe un SMS "
+            "con un link para avisar al Equipo de alerta."
+        ),
     )
 
 
@@ -139,25 +175,135 @@ async def save_persona_a(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    """Compat: agrega/actualiza el primer miembro de Red Comunitaria."""
     project = await _get_boton_project(db)
     if project.id != project_id:
         raise HTTPException(status_code=400, detail="Este endpoint es solo para Botón Rojo")
+    phone = normalize_phone_ar(payload.persona_a_phone)
+    members = await _ensure_red_members(db, project)
     cfg = await _get_or_create_settings(db, project.id)
-    cfg.persona_a_phone = normalize_phone_ar(payload.persona_a_phone)
+    cfg.persona_a_phone = phone
     cfg.updated_at = datetime.now(timezone.utc)
+    if members:
+        members[0].phone = phone
+    else:
+        db.add(
+            Contact(
+                project_id=project.id,
+                name="Red Comunitaria",
+                phone=phone,
+                group_name=RED_GROUP,
+            )
+        )
     await db.commit()
     await add_log(
         db,
         level="info",
         source="boton-rojo",
         message="Celular Red Comunitaria actualizado",
-        detail=cfg.persona_a_phone,
+        detail=phone,
     )
     return PersonaAConfig(
-        persona_a_phone=cfg.persona_a_phone,
+        persona_a_phone=phone,
         project_id=project.id,
         project_name=project.name,
-        avisar_equipo_hint="Cuando llega un formulario, Red Comunitaria recibe un SMS con un link para avisar al Equipo de alerta.",
+        avisar_equipo_hint=(
+            "Cuando llega un formulario, cada persona de Red Comunitaria recibe un SMS "
+            "con un link para avisar al Equipo de alerta."
+        ),
+    )
+
+
+@router.get(
+    "/api/projects/{project_id}/boton-rojo/red-comunitaria",
+    response_model=list[EquipoMemberOut],
+)
+async def list_red_comunitaria(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    project = await _get_boton_project(db)
+    if project.id != project_id:
+        raise HTTPException(status_code=400, detail="Este endpoint es solo para Botón Rojo")
+    return await _ensure_red_members(db, project)
+
+
+@router.post(
+    "/api/projects/{project_id}/boton-rojo/red-comunitaria",
+    response_model=EquipoMemberOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_red_comunitaria_member(
+    project_id: int,
+    payload: EquipoMemberIn,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    project = await _get_boton_project(db)
+    if project.id != project_id:
+        raise HTTPException(status_code=400, detail="Este endpoint es solo para Botón Rojo")
+    contact = Contact(
+        project_id=project.id,
+        name=payload.name.strip(),
+        phone=normalize_phone_ar(payload.phone),
+        group_name=RED_GROUP,
+        institution=(payload.institution or "").strip() or None,
+    )
+    db.add(contact)
+    cfg = await _get_or_create_settings(db, project.id)
+    if not (cfg.persona_a_phone or "").strip():
+        cfg.persona_a_phone = contact.phone
+        cfg.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(contact)
+    await add_log(
+        db,
+        level="info",
+        source="boton-rojo",
+        message=f"Miembro agregado a Red Comunitaria: {contact.name}",
+        detail=f"{contact.phone} · {contact.institution or '-'}",
+    )
+    return contact
+
+
+@router.delete(
+    "/api/projects/{project_id}/boton-rojo/red-comunitaria/{member_id}",
+    status_code=204,
+)
+async def delete_red_comunitaria_member(
+    project_id: int,
+    member_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    project = await _get_boton_project(db)
+    if project.id != project_id:
+        raise HTTPException(status_code=400, detail="Este endpoint es solo para Botón Rojo")
+    result = await db.execute(
+        select(Contact).where(
+            Contact.id == member_id,
+            Contact.project_id == project.id,
+            Contact.group_name == RED_GROUP,
+        )
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Miembro no encontrado")
+    phone = contact.phone
+    await db.delete(contact)
+    await db.flush()
+    cfg = await _get_or_create_settings(db, project.id)
+    remaining = await _list_group_members(db, project.id, RED_GROUP)
+    cfg.persona_a_phone = remaining[0].phone if remaining else ""
+    cfg.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await add_log(
+        db,
+        level="info",
+        source="boton-rojo",
+        message="Miembro eliminado de Red Comunitaria",
+        detail=phone,
     )
 
 
@@ -332,18 +478,14 @@ async def list_antecedentes(
                         id=m.id,
                         to_phone=m.to_phone,
                         to_name=(
-                            "Red Comunitaria"
-                            if m.category == "boton-rojo-persona-a"
-                            else (contact_by_phone[m.to_phone].name if m.to_phone in contact_by_phone else None)
+                            contact_by_phone[m.to_phone].name
+                            if m.to_phone in contact_by_phone
+                            else ("Red Comunitaria" if m.category == "boton-rojo-persona-a" else None)
                         ),
                         to_institution=(
-                            None
-                            if m.category == "boton-rojo-persona-a"
-                            else (
-                                contact_by_phone[m.to_phone].institution
-                                if m.to_phone in contact_by_phone
-                                else None
-                            )
+                            contact_by_phone[m.to_phone].institution
+                            if m.to_phone in contact_by_phone
+                            else None
                         ),
                         content=m.content,
                         status=m.status,
@@ -366,9 +508,8 @@ async def public_recibir_formulario(
 ):
     """Lo llama el otro proyecto cuando alguien completa el formulario."""
     project = await _get_boton_project(db)
-    cfg = await _get_or_create_settings(db, project.id)
-    persona_a = normalize_phone_ar(cfg.persona_a_phone)
-    if not persona_a:
+    red_members = await _ensure_red_members(db, project)
+    if not red_members:
         await add_log(
             db,
             level="error",
@@ -377,7 +518,8 @@ async def public_recibir_formulario(
             detail=payload.phone,
         )
         raise HTTPException(
-            status_code=400, detail="Falta configurar Celular Red Comunitaria en Botón Rojo"
+            status_code=400,
+            detail="Falta configurar Red Comunitaria en Botón Rojo (al menos un celular)",
         )
 
     requester = normalize_phone_ar(payload.phone)
@@ -400,16 +542,25 @@ async def public_recibir_formulario(
         f"Avisar equipo: {link}"
     )
 
-    message = Message(
-        project_id=project.id,
-        to_phone=persona_a,
-        content=content,
-        category="boton-rojo-persona-a",
-    )
-    db.add(message)
-    await db.commit()
-    await db.refresh(message)
-    message = await dispatch_message(db, message)
+    sent = 0
+    failed = 0
+    phones: list[str] = []
+    for member in red_members:
+        message = Message(
+            project_id=project.id,
+            to_phone=member.phone,
+            content=content,
+            category="boton-rojo-persona-a",
+        )
+        db.add(message)
+        await db.commit()
+        await db.refresh(message)
+        message = await dispatch_message(db, message)
+        phones.append(member.phone)
+        if message.status == "failed":
+            failed += 1
+        else:
+            sent += 1
 
     alert.status = "persona_a_notified"
     alert.notified_at = datetime.now(timezone.utc)
@@ -417,21 +568,24 @@ async def public_recibir_formulario(
 
     await add_log(
         db,
-        level="info" if message.status != "failed" else "error",
+        level="info" if sent > 0 else "error",
         source="boton-rojo",
         message="Formulario recibido: aviso enviado a Red Comunitaria",
-        detail=f"requester={requester} red_comunitaria={persona_a} status={message.status} link={link}",
+        detail=(
+            f"requester={requester} red_comunitaria={','.join(phones)} "
+            f"sent={sent} failed={failed} link={link}"
+        ),
     )
 
-    if message.status == "failed":
+    if sent == 0:
         return PublicAlertaOut(
             ok=False,
-            detail=f"No se pudo avisar a Red Comunitaria: {message.error_detail or message.status}",
+            detail=f"No se pudo avisar a Red Comunitaria (fallidos: {failed})",
             alert_id=alert.id,
         )
     return PublicAlertaOut(
         ok=True,
-        detail="Aviso enviado a Red Comunitaria con link para avisar al equipo",
+        detail=f"Aviso enviado a Red Comunitaria ({sent} SMS) con link para avisar al equipo",
         alert_id=alert.id,
     )
 

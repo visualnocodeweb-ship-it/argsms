@@ -18,9 +18,6 @@ from app.models import (
     User,
 )
 from app.routers import admin, auth, boton_rojo, contacts, devices, gateway, logs, messages, projects
-from app.services.httpsms import normalize_phone_ar
-
-
 async def ensure_sqlite_columns() -> None:
     """Agrega columnas nuevas a tablas ya existentes (SQLite)."""
     if not settings.database_url.startswith("sqlite"):
@@ -116,15 +113,14 @@ async def seed_data() -> None:
                 "link Avisar equipo → SMS a Equipo de alerta"
             )
 
-        # Limpiar solo contactos viejos de prueba; Equipo de alerta se conserva
+        # Conservar Equipo de alerta y Red Comunitaria; borrar otros contactos de prueba
         old_br_contacts = (
             await db.execute(select(Contact).where(Contact.project_id == boton_rojo.id))
         ).scalars().all()
         for contact in old_br_contacts:
-            if contact.group_name != "Equipo de alerta":
+            if contact.group_name not in {"Equipo de alerta", "Red Comunitaria"}:
                 await db.delete(contact)
 
-        persona_a_phone = normalize_phone_ar("02944249272")
         br_settings = (
             await db.execute(
                 select(BotonRojoSettings).where(BotonRojoSettings.project_id == boton_rojo.id)
@@ -134,11 +130,9 @@ async def seed_data() -> None:
             db.add(
                 BotonRojoSettings(
                     project_id=boton_rojo.id,
-                    persona_a_phone=persona_a_phone,
+                    persona_a_phone="",
                 )
             )
-        elif not (br_settings.persona_a_phone or "").strip():
-            br_settings.persona_a_phone = persona_a_phone
 
         devices = (await db.execute(select(Device))).scalars().all()
         if not devices:
