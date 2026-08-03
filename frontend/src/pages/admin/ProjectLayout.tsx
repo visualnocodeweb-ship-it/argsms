@@ -62,6 +62,7 @@ export function ProjectLayout() {
               <NavLink to={`${base}/antecedentes`}>Antecedentes</NavLink>
               <NavLink to={`${base}/red-comunitaria`}>Red Comunitaria</NavLink>
               <NavLink to={`${base}/equipo-alerta`}>Equipo de alerta</NavLink>
+              <NavLink to={`${base}/gateway`}>Celular / Gateway</NavLink>
               <NavLink to={`${base}/logs`}>Logs</NavLink>
             </>
           ) : (

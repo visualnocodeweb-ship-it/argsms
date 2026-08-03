@@ -5,6 +5,7 @@ import { BotonRojoAvisarPage } from "./pages/BotonRojoAvisarPage";
 import { LandingPage } from "./pages/LandingPage";
 import { BotonRojoAntecedentesPage } from "./pages/admin/BotonRojoAntecedentesPage";
 import { BotonRojoEquipoPage } from "./pages/admin/BotonRojoEquipoPage";
+import { BotonRojoGatewayPage } from "./pages/admin/BotonRojoGatewayPage";
 import { BotonRojoPersonaAPage } from "./pages/admin/BotonRojoPersonaAPage";
 import { ContactsPage } from "./pages/admin/ContactsPage";
 import { DashboardPage } from "./pages/admin/DashboardPage";
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="red-comunitaria" element={<BotonRojoPersonaAPage />} />
           <Route path="persona-a" element={<Navigate to="../red-comunitaria" replace />} />
           <Route path="equipo-alerta" element={<BotonRojoEquipoPage />} />
+          <Route path="gateway" element={<BotonRojoGatewayPage />} />
           <Route path="messages" element={<MessagesPage />} />
           <Route path="devices" element={<DevicesPage />} />
           <Route path="contacts" element={<ContactsPage />} />
